@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JMK Voter List</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457c5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Arial,sans-serif}
+header{background:#173b7a;color:#fff;padding:20px 4%;}header h1{margin:0;font-size:24px}header p{margin:5px 0 0;color:#dbe6ff}
+main{max-width:1500px;margin:22px auto;padding:0 16px}
+.toolbar,.stats,.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px #15264a0a}
+.stats{display:flex;gap:24px;flex-wrap:wrap}.stat strong{display:block;font-size:22px}.stat span{color:var(--muted);font-size:12px}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+input,select,button{font:inherit;border:1px solid #cfd6e2;border-radius:8px;padding:10px;background:#fff;color:var(--ink);width:100%}
+button{cursor:pointer;font-weight:600}.buttons{display:flex;gap:8px;margin-top:12px}.buttons button{width:auto}.buttons .active{background:var(--accent);color:#fff;border-color:var(--accent)}
+#results{color:var(--muted);margin:0 0 12px}
+.table-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:850px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{background:#edf2fb;position:sticky;top:0;z-index:1}tr:hover td{background:#f8faff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.vcard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 2px 8px #15264a08}
+.vcard h3{margin:0 0 10px;font-size:17px}.vcard .sub{color:var(--muted);font-size:13px;margin-bottom:8px}
+.detail{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}.detail div{min-width:0}.detail small{display:block;color:var(--muted);font-size:11px}.detail span{overflow-wrap:anywhere}
+.hidden{display:none!important}.empty{text-align:center;padding:35px;color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+@media(max-width:600px){header h1{font-size:20px}.toolbar,.stats,.panel{padding:12px}.buttons button{flex:1}}
+</style>
+</head>
+<body>
+<header><h1>JMK Voter List</h1><p>Search and view voter details</p></header>
+<main>
+<section class="stats">
+ <div class="stat"><strong id="total">0</strong><span>Total records</span></div>
+ <div class="stat"><strong id="shown">0</strong><span>Displayed records</span></div>
+</section>
+<section class="toolbar">
+ <div class="filters">
+  <input id="snoSearch" placeholder="Search by S.No">
+  <input id="nameSearch" placeholder="Search by Name">
+  <select id="partyFilter"><option value="">All Parties</option></select>
+  <select id="genderFilter"><option value="">All Genders</option></select>
+  <select id="wardFilter"><option value="">All Wards</option></select>
+ </div>
+ <div class="buttons">
+  <button id="gridBtn" class="active" type="button">Grid View</button>
+  <button id="listBtn" type="button">List View</button>
+  <button id="resetBtn" type="button">Reset Filters</button>
+ </div>
+</section>
+<p id="results" aria-live="polite"></p>
+<section id="gridView" class="grid"></section>
+<section id="listView" class="table-wrap hidden"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></section>
+<div id="empty" class="empty hidden">No matching voter records found.</div>
+</main>
+<footer>JMK Voter List · Works as a static GitHub Pages website</footer>
+<script src="voter-data.js"></script>
+<script>
+const headers=window.VOTER_DATA.headers, records=window.VOTER_DATA.records;
+const $=id=>document.getElementById(id);
+const value=(r,k)=>String(r[k]??"");
+function fillSelect(id,key,label){
+ const sel=$(id), vals=[...new Set(records.map(r=>value(r,key)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+ vals.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o)});
+}
+fillSelect("partyFilter","Party");fillSelect("genderFilter","Gender");fillSelect("wardFilter","Ward");
+$("total").textContent=records.length;
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function filtered(){
+ const sno=$("snoSearch").value.trim().toLowerCase(), name=$("nameSearch").value.trim().toLowerCase();
+ return records.filter(r=>
+  (!sno||value(r,"S.No").toLowerCase().includes(sno)) &&
+  (!name||value(r,"Name").toLowerCase().includes(name)) &&
+  (!$("partyFilter").value||value(r,"Party")===$("partyFilter").value) &&
+  (!$("genderFilter").value||value(r,"Gender")===$("genderFilter").value) &&
+  (!$("wardFilter").value||value(r,"Ward")===$("wardFilter").value)
+ );
+}
+function render(){
+ const data=filtered();$("shown").textContent=data.length;$("results").textContent=`Showing ${data.length} of ${records.length} records`;
+ $("empty").classList.toggle("hidden",data.length!==0);
+ $("gridView").innerHTML=data.map(r=>{
+  const title=value(r,"Name")||"Unnamed voter";
+  const sub=[value(r,"S.No")?`S.No: ${value(r,"S.No")}`:"",value(r,"Voter ID")].filter(Boolean).join(" · ");
+  const details=headers.filter(h=>!["Name","S.No"].includes(h)).map(h=>`<div><small>${esc(h)}</small><span>${esc(value(r,h)||"—")}</span></div>`).join("");
+  return `<article class="vcard"><h3>${esc(title)}</h3><div class="sub">${esc(sub)}</div><div class="detail">${details}</div></article>`;
+ }).join("");
+ $("tableHead").innerHTML="<tr>"+headers.map(h=>`<th>${esc(h)}</th>`).join("")+"</tr>";
+ $("tableBody").innerHTML=data.map(r=>"<tr>"+headers.map(h=>`<td>${esc(value(r,h))}</td>`).join("")+"</tr>").join("");
+}
+["snoSearch","nameSearch","partyFilter","genderFilter","wardFilter"].forEach(id=>$(id).addEventListener(id.includes("Filter")?"change":"input",render));
+$("resetBtn").addEventListener("click",()=>{["snoSearch","nameSearch","partyFilter","genderFilter","wardFilter"].forEach(id=>$(id).value="");render()});
+$("gridBtn").addEventListener("click",()=>{$("gridView").classList.remove("hidden");$("listView").classList.add("hidden");$("gridBtn").classList.add("active");$("listBtn").classList.remove("active")});
+$("listBtn").addEventListener("click",()=>{$("listView").classList.remove("hidden");$("gridView").classList.add("hidden");$("listBtn").classList.add("active");$("gridBtn").classList.remove("active")});
+render();
+</script>
+</body></html>
