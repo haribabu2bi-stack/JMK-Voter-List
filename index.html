@@ -47,17 +47,53 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
   <button id="resetBtn" type="button">Reset Filters</button>
  </div>
 </section>
-<p id="results" aria-live="polite"></p>
+<p id="syncStatus" style="color:#667085;margin:0 0 8px">Party data connection not configured yet.</p><p id="results" aria-live="polite"></p>
 <section id="gridView" class="grid"></section>
 <section id="listView" class="table-wrap hidden"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></section>
 <div id="empty" class="empty hidden">No matching voter records found.</div>
 </main>
-<footer>JMK Voter List · Works as a static GitHub Pages website</footer>
+<footer>JMK Voter List · Party updates are shared through Google Sheets</footer>
 <script src="voter-data.js"></script>
 <script>
 const headers=window.VOTER_DATA.headers, records=window.VOTER_DATA.records;
 const $=id=>document.getElementById(id);
 const value=(r,k)=>String(r[k]??"");
+const API_URL = "https://script.google.com/macros/s/AKfycbwS01V5XK0HlRzll_yDJE1LDFr-BsGtcoALuv-kcq5pNygyjX9SgwUTX_vqnHFEjgRO/exec";
+let sharedParties = {};
+function apiReady(){ return API_URL.startsWith("https://script.google.com/") && !API_URL.includes("PASTE_"); }
+function loadSharedParties(){
+ if(!apiReady()){ render(); return; }
+ const cb="partyCallback_"+Date.now();
+ window[cb]=(payload)=>{
+   sharedParties=payload.parties||{};
+   records.forEach(r=>{ if(Object.prototype.hasOwnProperty.call(sharedParties,String(r["S.No"]))) r.Party=sharedParties[String(r["S.No"])]||""; });
+   const sel=$("partyFilter"); sel.innerHTML='<option value="">All Parties</option>';
+   [...new Set(records.map(r=>value(r,"Party")).filter(Boolean))].sort().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o);});
+   delete window[cb]; render();
+ };
+ const script=document.createElement("script");
+ script.src=API_URL+"?callback="+cb;
+ script.onerror=()=>{ delete window[cb]; $("syncStatus").textContent="Could not load shared Party data."; render(); };
+ document.body.appendChild(script);
+}
+function saveParty(sno, inputId, button){
+ const party=$(inputId).value.trim();
+ button.disabled=true; button.textContent="Saving...";
+ if(!apiReady()){
+   button.disabled=false; button.textContent="Save";
+   alert("First connect the Google Apps Script Web App URL in index.html.");
+   return;
+ }
+ fetch(API_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"saveParty",sno:String(sno),party})})
+ .then(()=>{ 
+   const rec=records.find(r=>String(r["S.No"])===String(sno));
+   if(rec) rec.Party=party;
+   button.disabled=false; button.textContent="Saved";
+   $("syncStatus").textContent="Party saved. Refreshing shared data...";
+   setTimeout(()=>{ button.textContent="Save"; loadSharedParties(); },900);
+ })
+ .catch(()=>{button.disabled=false;button.textContent="Save";alert("Save failed. Please try again.");});
+}
 function fillSelect(id,key,label){
  const sel=$(id), vals=[...new Set(records.map(r=>value(r,key)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
  vals.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o)});
@@ -81,16 +117,24 @@ function render(){
  $("gridView").innerHTML=data.map(r=>{
   const title=value(r,"Name")||"Unnamed voter";
   const sub=[value(r,"S.No")?`S.No: ${value(r,"S.No")}`:"",value(r,"Voter ID")].filter(Boolean).join(" · ");
-  const details=headers.filter(h=>!["Name","S.No"].includes(h)).map(h=>`<div><small>${esc(h)}</small><span>${esc(value(r,h)||"—")}</span></div>`).join("");
-  return `<article class="vcard"><h3>${esc(title)}</h3><div class="sub">${esc(sub)}</div><div class="detail">${details}</div></article>`;
+  const details=headers.filter(h=>!["Name","S.No","Party"].includes(h)).map(h=>`<div><small>${esc(h)}</small><span>${esc(value(r,h)||"—")}</span></div>`).join("");
+  const pid="gparty_"+String(r["S.No"]).replace(/[^a-zA-Z0-9_-]/g,"_");
+  return `<article class="vcard"><h3>${esc(title)}</h3><div class="sub">${esc(sub)}</div><div class="detail"><div style="grid-column:1/-1"><small>Party (editable)</small><input id="${pid}" value="${esc(value(r,"Party"))}" aria-label="Party for S.No ${esc(value(r,"S.No"))}"><button type="button" style="margin-top:6px" onclick="saveParty('${esc(value(r,"S.No"))}','${pid}',this)">Save Party</button></div>${details}</div></article>`;
  }).join("");
  $("tableHead").innerHTML="<tr>"+headers.map(h=>`<th>${esc(h)}</th>`).join("")+"</tr>";
- $("tableBody").innerHTML=data.map(r=>"<tr>"+headers.map(h=>`<td>${esc(value(r,h))}</td>`).join("")+"</tr>").join("");
+ $("tableBody").innerHTML=data.map(r=>"<tr>"+headers.map(h=>{
+    if(h==="Party"){
+      const pid="tparty_"+String(r["S.No"]).replace(/[^a-zA-Z0-9_-]/g,"_");
+      return `<td><input id="${pid}" value="${esc(value(r,h))}" aria-label="Party for S.No ${esc(value(r,"S.No"))}"><button type="button" style="margin-top:5px" onclick="saveParty('${esc(value(r,"S.No"))}','${pid}',this)">Save</button></td>`;
+    }
+    return `<td>${esc(value(r,h))}</td>`;
+  }).join("")+"</tr>").join("");
 }
 ["snoSearch","nameSearch","partyFilter","genderFilter","wardFilter"].forEach(id=>$(id).addEventListener(id.includes("Filter")?"change":"input",render));
 $("resetBtn").addEventListener("click",()=>{["snoSearch","nameSearch","partyFilter","genderFilter","wardFilter"].forEach(id=>$(id).value="");render()});
 $("gridBtn").addEventListener("click",()=>{$("gridView").classList.remove("hidden");$("listView").classList.add("hidden");$("gridBtn").classList.add("active");$("listBtn").classList.remove("active")});
 $("listBtn").addEventListener("click",()=>{$("listView").classList.remove("hidden");$("gridView").classList.add("hidden");$("listBtn").classList.add("active");$("gridBtn").classList.remove("active")});
 render();
+loadSharedParties();
 </script>
 </body></html>
