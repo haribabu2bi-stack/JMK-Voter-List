@@ -47,7 +47,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
   <button id="resetBtn" type="button">Reset Filters</button>
  </div>
 </section>
-<p id="syncStatus" style="color:#667085;margin:0 0 8px">Party data connection not configured yet.</p><p id="results" aria-live="polite"></p>
+<p id="syncStatus" style="color:#667085;margin:0 0 8px">Connecting to shared Party data...</p><p id="results" aria-live="polite"></p>
 <section id="gridView" class="grid"></section>
 <section id="listView" class="table-wrap hidden"><table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table></section>
 <div id="empty" class="empty hidden">No matching voter records found.</div>
@@ -60,47 +60,132 @@ const $=id=>document.getElementById(id);
 const value=(r,k)=>String(r[k]??"");
 const API_URL = "https://script.google.com/macros/s/AKfycbwS01V5XK0HlRzll_yDJE1LDFr-BsGtcoALuv-kcq5pNygyjX9SgwUTX_vqnHFEjgRO/exec";
 let sharedParties = {};
-function apiReady(){ return API_URL.startsWith("https://script.google.com/") && !API_URL.includes("PASTE_"); }
+
+function apiReady(){
+  return API_URL.startsWith("https://script.google.com/") && !API_URL.includes("PASTE_");
+}
+
+function refreshPartyFilter(){
+  const sel=$("partyFilter");
+  const selected=sel.value;
+  sel.innerHTML='<option value="">All Parties</option>';
+  [...new Set(records.map(r=>value(r,"Party")).filter(Boolean))]
+    .sort().forEach(v=>{
+      const o=document.createElement("option");
+      o.value=v;o.textContent=v;sel.appendChild(o);
+    });
+  sel.value=selected;
+}
+
 function loadSharedParties(){
- if(!apiReady()){ render(); return; }
- const cb="partyCallback_"+Date.now();
- window[cb]=(payload)=>{
-   sharedParties=payload.parties||{};
-   records.forEach(r=>{ if(Object.prototype.hasOwnProperty.call(sharedParties,String(r["S.No"]))) r.Party=sharedParties[String(r["S.No"])]||""; });
-   const sel=$("partyFilter"); sel.innerHTML='<option value="">All Parties</option>';
-   [...new Set(records.map(r=>value(r,"Party")).filter(Boolean))].sort().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o);});
-   delete window[cb]; render();
- };
- const script=document.createElement("script");
- script.src=API_URL+"?callback="+cb;
- script.onerror=()=>{ delete window[cb]; $("syncStatus").textContent="Could not load shared Party data."; render(); };
- document.body.appendChild(script);
+  if(!apiReady()){
+    $("syncStatus").textContent="Google Sheets connection is not configured.";
+    render();return;
+  }
+  const cb="partyLoad_"+Date.now()+"_"+Math.floor(Math.random()*10000);
+  const script=document.createElement("script");
+  let finished=false;
+  const cleanup=()=>{
+    delete window[cb];
+    if(script.parentNode) script.parentNode.removeChild(script);
+  };
+  window[cb]=(payload)=>{
+    finished=true;cleanup();
+    if(!payload || !payload.success){
+      $("syncStatus").textContent="Could not load Party data: "+(payload?.message||"Unknown error");
+      render();return;
+    }
+    sharedParties=payload.parties||{};
+    records.forEach(r=>{
+      const key=String(r["S.No"]).trim();
+      if(Object.prototype.hasOwnProperty.call(sharedParties,key)){
+        r.Party=sharedParties[key]||"";
+      }
+    });
+    refreshPartyFilter();
+    $("syncStatus").textContent="Party data connected to Google Sheets.";
+    render();
+  };
+  script.onerror=()=>{
+    if(finished)return;
+    cleanup();
+    $("syncStatus").textContent="Could not connect to Google Sheets. Check deployment access.";
+    render();
+  };
+  script.src=API_URL+"?callback="+encodeURIComponent(cb)+"&_="+Date.now();
+  document.body.appendChild(script);
 }
-function saveParty(sno, inputId, button){
- const party=$(inputId).value.trim();
- button.disabled=true; button.textContent="Saving...";
- if(!apiReady()){
-   button.disabled=false; button.textContent="Save";
-   alert("First connect the Google Apps Script Web App URL in index.html.");
-   return;
- }
- fetch(API_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"saveParty",sno:String(sno),party})})
- .then(()=>{ 
-   const rec=records.find(r=>String(r["S.No"])===String(sno));
-   if(rec) rec.Party=party;
-   button.disabled=false; button.textContent="Saved";
-   $("syncStatus").textContent="Party saved. Refreshing shared data...";
-   setTimeout(()=>{ button.textContent="Save"; loadSharedParties(); },900);
- })
- .catch(()=>{button.disabled=false;button.textContent="Save";alert("Save failed. Please try again.");});
+
+function saveParty(sno,inputId,button){
+  const party=$(inputId).value.trim();
+  button.disabled=true;
+  const originalText=button.textContent;
+  button.textContent="Saving...";
+  if(!apiReady()){
+    button.disabled=false;button.textContent=originalText;
+    alert("Google Apps Script URL is not configured.");
+    return;
+  }
+
+  const cb="partySave_"+Date.now()+"_"+Math.floor(Math.random()*10000);
+  const script=document.createElement("script");
+  let finished=false;
+
+  const cleanup=()=>{
+    delete window[cb];
+    if(script.parentNode)script.parentNode.removeChild(script);
+  };
+
+  window[cb]=(payload)=>{
+    finished=true;cleanup();
+    button.disabled=false;
+
+    if(!payload || !payload.success){
+      button.textContent="Save";
+      $("syncStatus").textContent="Save failed: "+(payload?.message||"Unknown error");
+      alert($("syncStatus").textContent);
+      return;
+    }
+
+    const rec=records.find(r=>String(r["S.No"]).trim()===String(sno).trim());
+    if(rec)rec.Party=party;
+    sharedParties[String(sno).trim()]=party;
+    refreshPartyFilter();
+    $("syncStatus").textContent="Party saved successfully to Google Sheets.";
+    button.textContent="Saved";
+    render();
+    setTimeout(()=>{button.textContent="Save";},1500);
+  };
+
+  script.onerror=()=>{
+    if(finished)return;
+    cleanup();
+    button.disabled=false;button.textContent="Save";
+    $("syncStatus").textContent="Save request failed. Check Apps Script deployment and access.";
+    alert($("syncStatus").textContent);
+  };
+
+  script.src=API_URL+
+    "?action=saveParty"+
+    "&sno="+encodeURIComponent(String(sno))+
+    "&party="+encodeURIComponent(party)+
+    "&callback="+encodeURIComponent(cb)+
+    "&_="+Date.now();
+
+  document.body.appendChild(script);
 }
-function fillSelect(id,key,label){
+
+function fillSelect(id,key){
  const sel=$(id), vals=[...new Set(records.map(r=>value(r,key)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
  vals.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o)});
 }
-fillSelect("partyFilter","Party");fillSelect("genderFilter","Gender");fillSelect("wardFilter","Ward");
+fillSelect("genderFilter","Gender");
+fillSelect("wardFilter","Ward");
 $("total").textContent=records.length;
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+function esc(s){
+ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
 function filtered(){
  const sno=$("snoSearch").value.trim().toLowerCase(), name=$("nameSearch").value.trim().toLowerCase();
  return records.filter(r=>
@@ -112,7 +197,9 @@ function filtered(){
  );
 }
 function render(){
- const data=filtered();$("shown").textContent=data.length;$("results").textContent=`Showing ${data.length} of ${records.length} records`;
+ const data=filtered();
+ $("shown").textContent=data.length;
+ $("results").textContent=`Showing ${data.length} of ${records.length} records`;
  $("empty").classList.toggle("hidden",data.length!==0);
  $("gridView").innerHTML=data.map(r=>{
   const title=value(r,"Name")||"Unnamed voter";
@@ -137,4 +224,5 @@ $("listBtn").addEventListener("click",()=>{$("listView").classList.remove("hidde
 render();
 loadSharedParties();
 </script>
-</body></html>
+</body>
+</html>

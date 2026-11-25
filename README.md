@@ -1,33 +1,36 @@
 # JMK Voter List
 
-A static voter-list website built from `JMK_Voter_List(1).xlsx`.
+## Files to upload to GitHub
 
-## Files
-- `index.html` — website interface (Grid View and List View).
-- `voter-data.js` — voter records embedded as local JavaScript data.
+Upload/replace these two files in the root of your existing repository:
 
-## Features
-- Search by S.No.
-- Search by voter Name.
-- Filter by Party, Gender, and Ward.
-- Switch between Grid View and List View.
-- Displays all source columns: S.No, Party, Name, Tandri Peru, Age, Gender, Door No, Voter ID, Ward.
-- No server or database required; the website works as a static site.
+- `index.html` — updated voter app page with Google Sheets Party read/save support.
+- `README.md` — this setup guide.
 
-## Run locally
-Keep `index.html` and `voter-data.js` in the same folder, then open `index.html` in a browser.
+**Keep your existing `voter-data.js` file. Do not delete or replace it.** The app needs it to display the voter records.
 
-## Publish with GitHub Pages
-1. Create or open your GitHub repository.
-2. Upload `index.html`, `voter-data.js`, and this `README.md` to the repository root.
-3. Open **Settings → Pages**.
-4. Under **Build and deployment**, choose **Deploy from a branch**.
-5. Select branch **main** and folder **/(root)**, then click **Save**.
-6. Wait for GitHub Pages to publish and open the generated website link.
+## Google Apps Script
 
-## Source data
-- Worksheet: `Voter Details`
-- Records: 1290
-- Columns: 9
+The Apps Script attached to your Google Sheet should use the updated `doGet(e)` code that was just deployed. The sheet tab name must be exactly `Voter Details`, with:
 
-This is a static viewer. It does not edit or save changes back to the Excel file.
+- Column A: `S.No`
+- Column B: `Party`
+
+The Web App URL is already configured in `index.html`.
+
+## GitHub upload
+
+1. Open your existing `JMK-Voter-List` repository.
+2. Upload/replace `index.html` and `README.md` in the repository root.
+3. Commit the changes.
+4. Wait a minute, then open: https://haribabu2bi-stack.github.io/JMK-Voter-List/
+
+## Test
+
+1. Open the app.
+2. Wait until the status says `Party data connected to Google Sheets.`
+3. Enter a Party value for a test S.No and click Save.
+4. Confirm that the same S.No row in the `Voter Details` sheet has the Party value in column B.
+5. Refresh the app and confirm the Party value remains visible.
+
+If the app says it cannot connect, check that the Apps Script Web App deployment is accessible to users with the intended access setting.
