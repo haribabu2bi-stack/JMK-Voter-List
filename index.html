@@ -16,7 +16,7 @@ input,select,button{font:inherit;border:1px solid #cfd6e2;border-radius:8px;padd
 button{cursor:pointer;font-weight:600}.buttons{display:flex;gap:8px;margin-top:12px}.buttons button{width:auto}.buttons .active{background:var(--accent);color:#fff;border-color:var(--accent)}
 #results{color:var(--muted);margin:0 0 12px}
 .table-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
-table{border-collapse:collapse;width:100%;min-width:850px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{background:#edf2fb;position:sticky;top:0;z-index:1}tr:hover td{background:#f8faff}
+table{border-collapse:collapse;width:100%;min-width:1050px;table-layout:auto}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:middle}th{background:#edf2fb;position:sticky;top:0;z-index:1}tr:hover td{background:#f8faff}td.party-cell{min-width:230px}.party-editor{display:flex;align-items:center;gap:8px;min-width:205px}.party-editor input{width:130px;min-width:100px;flex:1}.party-editor button{width:auto;flex:0 0 auto;padding:8px 12px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .vcard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 2px 8px #15264a08}
 .vcard h3{margin:0 0 10px;font-size:17px}.vcard .sub{color:var(--muted);font-size:13px;margin-bottom:8px}
@@ -125,7 +125,7 @@ function render(){
  $("tableBody").innerHTML=data.map(r=>"<tr>"+headers.map(h=>{
     if(h==="Party"){
       const pid="tparty_"+String(r["S.No"]).replace(/[^a-zA-Z0-9_-]/g,"_");
-      return `<td><input id="${pid}" value="${esc(value(r,h))}" aria-label="Party for S.No ${esc(value(r,"S.No"))}"><button type="button" style="margin-top:5px" onclick="saveParty('${esc(value(r,"S.No"))}','${pid}',this)">Save</button></td>`;
+      return `<td class="party-cell"><div class="party-editor"><input id="${pid}" value="${esc(value(r,h))}" aria-label="Party for S.No ${esc(value(r,"S.No"))}"><button type="button" onclick="saveParty('${esc(value(r,"S.No"))}','${pid}',this)">Save</button></div></td>`;
     }
     return `<td>${esc(value(r,h))}</td>`;
   }).join("")+"</tr>").join("");
